@@ -74,12 +74,15 @@ vim.opt.scrolloff = 10
 vim.opt.hlsearch = true
 vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>')
 
--- TODO:: move the diagnostics to the new API
--- Diagnostic keymaps
+-- Diagnostic keymaps (updated to newer jump API)
 vim.keymap.set('n', '[d', function()
-  vim.diagnostic.goto_prev { severity = vim.diagnostic.severity.WARN }
+  vim.diagnostic.jump { count = -1, severity = { min = vim.diagnostic.severity.WARN } }
 end, { desc = 'Go to previous [D]iagnostic message' })
-vim.keymap.set('n', ']d', vim.diagnostic.goto_next, { desc = 'Go to next [D]iagnostic message' })
+
+vim.keymap.set('n', ']d', function()
+  vim.diagnostic.jump { count = 1 }
+end, { desc = 'Go to next [D]iagnostic message' })
+
 vim.keymap.set('n', '<leader>e', vim.diagnostic.open_float, { desc = 'Show diagnostic [E]rror messages' })
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
 
@@ -167,31 +170,21 @@ vim.api.nvim_create_autocmd('VimEnter', {
 -- [[ Install `lazy.nvim` plugin manager ]]
 --    See `:help lazy.nvim.txt` or https://github.com/folke/lazy.nvim for more info
 local lazypath = vim.fn.stdpath 'data' .. '/lazy/lazy.nvim'
-if not vim.loop.fs_stat(lazypath) then
+
+-- Updated: prefer vim.uv (vim.loop is deprecated)
+if not (vim.uv and vim.uv.fs_stat(lazypath)) then
   local lazyrepo = 'https://github.com/folke/lazy.nvim.git'
   vim.fn.system { 'git', 'clone', '--filter=blob:none', '--branch=stable', lazyrepo, lazypath }
 end ---@diagnostic disable-next-line: undefined-field
 vim.opt.rtp:prepend(lazypath)
 
 -- [[ Configure and install plugins ]]
---
---  To check the current status of your plugins, run
---    :Lazy
---
---  You can press `?` in this menu for help. Use `:q` to close the window
---
---  To update plugins you can run
---    :Lazy update
---
--- NOTE: Here is where you install your plugins.
 require('lazy').setup({
-  -- NOTE: Plugins can be added with a link (or for a github repo: 'owner/repo' link).
-  'tpope/vim-sleuth', -- Detect tabstop and shiftwidth automatically
+  'tpope/vim-sleuth',
 
-  -- "gc" to comment visual regions/lines
   { 'numToStr/Comment.nvim', opts = {} },
 
-  { -- Adds git related signs to the gutter, as well as utilities for managing changes
+  {
     'lewis6991/gitsigns.nvim',
     opts = {
       signs = {
@@ -204,7 +197,7 @@ require('lazy').setup({
     },
   },
 
-  { -- Useful plugin to show you pending keybinds.
+  {
     'folke/which-key.nvim',
     event = 'VimEnter',
     config = function()
@@ -212,7 +205,7 @@ require('lazy').setup({
     end,
   },
 
-  { -- Fuzzy Finder (files, lsp, etc)
+  {
     'nvim-telescope/telescope.nvim',
     event = 'VimEnter',
     dependencies = {
@@ -270,13 +263,13 @@ require('lazy').setup({
     end,
   },
 
-  { -- for rendering markdown nicely
+  {
     'MeanderingProgrammer/render-markdown.nvim',
     dependencies = { 'nvim-treesitter/nvim-treesitter', 'echasnovski/mini.nvim' },
     opts = {},
   },
 
-  { -- LSP Configuration & Plugins
+  {
     'neovim/nvim-lspconfig',
     dependencies = {
       { 'williamboman/mason.nvim', config = true },
@@ -286,7 +279,6 @@ require('lazy').setup({
       { 'folke/neodev.nvim', opts = {} },
     },
     config = function()
-      -- On LSP attach
       vim.api.nvim_create_autocmd('LspAttach', {
         group = vim.api.nvim_create_augroup('kickstart-lsp-attach', { clear = true }),
         callback = function(event)
@@ -323,15 +315,17 @@ require('lazy').setup({
             })
           end
 
+          -- Updated: keep your toggle behavior, but scope to this buffer via filter
           if client and client.server_capabilities.inlayHintProvider and vim.lsp.inlay_hint then
+            local buf = event.buf
             map('<leader>th', function()
-              vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled())
+              local filter = { bufnr = buf }
+              vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled(filter), filter)
             end, '[T]oggle Inlay [H]ints')
           end
         end,
       })
 
-      -- On LSP detach: guard clears & use per-buffer group id
       vim.api.nvim_create_autocmd('LspDetach', {
         group = vim.api.nvim_create_augroup('kickstart-lsp-detach', { clear = true }),
         callback = function(event)
@@ -351,7 +345,6 @@ require('lazy').setup({
         gopls = {},
         pyright = {},
         rust_analyzer = {},
-
         lua_ls = {
           settings = {
             Lua = {
@@ -385,7 +378,7 @@ require('lazy').setup({
     end,
   },
 
-  { -- Autoformat
+  {
     'stevearc/conform.nvim',
     lazy = false,
     keys = {
@@ -413,7 +406,7 @@ require('lazy').setup({
     },
   },
 
-  { -- Autocompletion
+  {
     'hrsh7th/nvim-cmp',
     event = 'InsertEnter',
     dependencies = {
@@ -425,9 +418,7 @@ require('lazy').setup({
           end
           return 'make install_jsregexp'
         end)(),
-        dependencies = {
-          -- You can add friendly-snippets here if you want
-        },
+        dependencies = {},
       },
       'saadparwaiz1/cmp_luasnip',
       'hrsh7th/cmp-nvim-lsp',
@@ -472,19 +463,18 @@ require('lazy').setup({
     end,
   },
 
-  { -- You can easily change to a different colorscheme.
+  {
     'folke/tokyonight.nvim',
     priority = 1000,
     init = function()
-      vim.cmd.colorscheme 'sorbet' -- ensure this exists or change to a valid scheme
+      vim.cmd.colorscheme 'sorbet'
       vim.cmd.hi 'Comment gui=none'
     end,
   },
 
-  -- Highlight todo, notes, etc in comments
   { 'folke/todo-comments.nvim', event = 'VimEnter', dependencies = { 'nvim-lua/plenary.nvim' }, opts = { signs = false } },
 
-  { -- Collection of various small independent plugins/modules
+  {
     'echasnovski/mini.nvim',
     config = function()
       require('mini.ai').setup { n_lines = 500 }
@@ -500,7 +490,7 @@ require('lazy').setup({
     end,
   },
 
-  { -- Highlight, edit, and navigate code
+  {
     'nvim-treesitter/nvim-treesitter',
     build = ':TSUpdate',
     opts = {

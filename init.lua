@@ -125,6 +125,9 @@ vim.api.nvim_create_autocmd('BufWritePost', {
     -- Run black synchronously
     vim.fn.system { 'black', file }
 
+    -- run isort synchronously
+    vim.fn.system { 'isort', file }
+
     -- Reload the buffer only if black succeeded
     if vim.v.shell_error == 0 then
       -- `edit!` discards local unsaved changes and reloads from disk
@@ -166,6 +169,18 @@ vim.api.nvim_create_autocmd('VimEnter', {
     end
   end,
 })
+
+vim.g.rustaceanvim = {
+  server = {
+    settings = {
+      ['rust-analyzer'] = {
+        cargo = {
+          allFeatures = true,
+        },
+      },
+    },
+  },
+}
 
 -- [[ Install `lazy.nvim` plugin manager ]]
 --    See `:help lazy.nvim.txt` or https://github.com/folke/lazy.nvim for more info
@@ -344,7 +359,15 @@ require('lazy').setup({
       local servers = {
         gopls = {},
         pyright = {},
-        rust_analyzer = {},
+        rust_analyzer = {
+          settings = {
+            ['rust-analyzer'] = {
+              cargo = {
+                allFeatures = true,
+              },
+            },
+          },
+        },
         lua_ls = {
           settings = {
             Lua = {
